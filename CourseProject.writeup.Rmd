@@ -1,0 +1,164 @@
+---
+title: 'Practical Machine Learning: Course Project'
+output:
+  pdf_document: default
+  html_document:
+    keep_md: yes
+---
+### Johns Hopkins University / Coursera
+### April 2015
+
+```{r Summary, echo = FALSE, cache = TRUE, output = "hide"}
+
+options (warn = -1)
+
+library (caret)
+library (randomForest)
+
+dataTrainingRaw <- read.csv ("pml-training.csv", na.strings = "NA")
+fKeep <- sapply (1:ncol (dataTrainingRaw), function (i) { if ( 0.5 < length (which (is.na (dataTrainingRaw [ , i]))) / nrow (dataTrainingRaw)) { FALSE } else { (((7 < i) & !is.factor (dataTrainingRaw [ , i])) | (names (dataTrainingRaw) [i] == "classe")) } })
+dataTraining <- dataTrainingRaw [ , fKeep]
+
+set.seed (314159)
+indexTraining <- createDataPartition (dataTraining$classe, p = 0.80, list = FALSE)
+trainingSet <- dataTraining [indexTraining, ]
+testingSet <- dataTraining [-indexTraining, ]
+
+trainOptions <- trainControl(method = "oob", 5)
+model <- train (classe ~ ., method = "rf", data = trainingSet, ntree=50, trControl = trainOptions)
+
+predictRF <- predict (model, testingSet)
+testResults <- confusionMatrix (predictRF, testingSet$classe)
+
+```
+
+## Summary
+  
+We use the UCI Human Activity Recognition dabase of Weight Lifting Exercises to build predictor for classifying correctness of performed exercises.  **The predictor is trained via a random forest methodology** using data about the exercise performance itself, and no data about the subject or time window, in hopes of creating a model which can be generalized beyond the subjects in the database.
+
+The model achieved **`r round (100 * model$results [ 2, 1], 1)`% cross validation accuracy (collected in building the forest), or an expected error rate of `r round (100 * (1 - model$results [2, 1]), 1)`%**.  **Out of sample testing achieved accuracy of `r round (100 * testResults$overall [1], 1)`% ( `r round (100 * (1 - testResults$overall [1]), 1)`% error rate)**.
+
+## Model Construction
+
+We first read the data, and exclude any variables that 1) have measurements for less than half the samples, or 2) are solely descriptive of the data collection (including subject name, timestamps, or timing windows).  What remains are measurements taken from the sensors.
+  
+```{r ReadandCleanData, echo = TRUE, output = "show", cache = TRUE}
+
+options (warn = -1)
+
+library (caret)
+library (randomForest)
+
+dataTrainingRaw <- read.csv ("pml-training.csv", na.strings = "NA")
+fKeep <- sapply (1:ncol (dataTrainingRaw), function (i) { if ( 0.5 < length (which (is.na (dataTrainingRaw [ , i]))) / nrow (dataTrainingRaw)) { FALSE } else { (((7 < i) & !is.factor (dataTrainingRaw [ , i])) | (names (dataTrainingRaw) [i] == "classe")) } })
+dataTraining <- dataTrainingRaw [ , fKeep]
+
+```
+
+We then partition the data into a training set (80%) and testing set (20%) and use the training set to create a random forest (up to 50 trees).  The forest is resampled 5 times.
+The most important variables are examined.
+
+```{r TrainModel, echo = TRUE, output = "show", cache = TRUE}
+
+set.seed (314159)
+indexTraining <- createDataPartition (dataTraining$classe, p = 0.80, list = FALSE)
+trainingSet <- dataTraining [indexTraining, ]
+testingSet <- dataTraining [-indexTraining, ]
+
+trainOptions <- trainControl(method = "oob", 5)
+model <- train (classe ~ ., method = "rf", data = trainingSet, ntree=50, trControl = trainOptions)
+
+variableImportance <- varImp (model)$importance
+varOrder <- order (-variableImportance [ , 1])
+head (cbind (variable = names (trainingSet) [varOrder], importance = variableImportance [varOrder, 1]), 10)
+
+```
+
+Here we see that key data involve belt movement (roll_belt, yaw_belt, pitch_belt), forearm position (pitch_forearm, roll_forearm), and weight movement (magnet_dumbbell_y, magnet_dumbbell_z).  Aside from these variables, importance drops quickly.
+  
+## Predictive Power
+
+We estimate out of sample performance in two ways.  First, we look at the cross validation accuracy and error as collected during creation of the random forest (in this case, the data was resampled 5 times).  Second, we use the model to predict the testing set held back from training, and examine its performance.  
+
+```{r Accuracy, echo = TRUE, output = "show", cache = TRUE}
+
+model$results
+
+predictRF <- predict (model, testingSet)
+testResults <- confusionMatrix (predictRF, testingSet$classe)
+testResults$overall
+
+```
+
+Here we see the model achieved `r round (100 * model$results [ 2, 1], 1)`% cross validation accuracy, or an expected error rate of `r round (100 * (1 - model$results [2, 1]), 1)`%.
+
+Out of sample testing achieved accuracy of `r round (100 * testResults$overall [1], 1)`%, or  `r round (100 * (1 - testResults$overall [1]), 1)`% error rate with 95% confidence interval of `r round (100 * (1 - testResults$overall [3]), 1)`-`r round (100 * (1 - testResults$overall [4]), 1)`%.
+  
+## Conclusions
+
+A random forest proved to be an effective method for training a predictor of exercise quality, with near-perfect accuracy.  However, it should be noted that all data (training and testing) has come from only 6 subjects.  It would be interesting to look at performance of the model against other subjects not part of the training database at all.
+  
+## Appendix
+
+The full code for the assignment is provided below.  Output is held back (already used in the report above).
+
+```{r Assignment code, echo = TRUE, output = "hide", cache = TRUE}
+
+## 
+## Johns Hopkins University / Coursera
+## Practical Machine Learning
+## Course Project
+## April 2015
+##
+## This script implements the Prediction Assignment for the Johns Hopkins / Coursera Practical
+## Machine Learning course.  It imports the Weight Lifting Exercise dataset from the UCI Human
+## Activity Recognition database, trains a Random Forest for prediction of exercise correctness,
+## and tests the model on the course testing dataset.
+## 
+
+## 
+## 1. Read and clean the data by removing any variables which have more than half missing
+##    values or are descriptive of the data collection.  This limits the data available
+##    prediction to just features collected,
+##
+##    The script assumes the files are in the current working directory.
+## 
+
+library (caret)
+library (randomForest)
+
+dataTrainingRaw <- read.csv ("pml-training.csv", na.strings = "NA")
+fKeep <- sapply (1:ncol (dataTrainingRaw), function (i) { if ( 0.5 < length (which (is.na (dataTrainingRaw [ , i]))) / nrow (dataTrainingRaw)) { FALSE } else { (((7 < i) & !is.factor (dataTrainingRaw [ , i])) | (names (dataTrainingRaw) [i] == "classe")) } })
+dataTraining <- dataTrainingRaw [ , fKeep]
+
+##
+## 2. Segment the data for training (80%) and testing (20%) then train a random forest
+##    with 50 trees per run.  This keeps the training time manageable and (after some
+##    experimentation) preserves accuracy.  Training uses out-of-bag resampling and
+##    performs 5 iterations
+##
+##    A seed is set for reproducibility, and variable importance is examined.
+##
+
+set.seed (314159)
+indexTraining <- createDataPartition (dataTraining$classe, p = 0.80, list = FALSE)
+trainingSet <- dataTraining [indexTraining, ]
+testingSet <- dataTraining [-indexTraining, ]
+
+trainOptions <- trainControl(method = "oob", 5)
+model <- train (classe ~ ., method = "rf", data = trainingSet, ntree=50, trControl = trainOptions)
+
+variableImportance <- varImp (model)$importance
+varOrder <- order (-variableImportance [ , 1])
+#head (cbind (variable = names (trainingSet) [varOrder], importance = variableImportance [varOrder, 1]), 10)
+
+##
+## 3. Apply the model to predict the held-back testing data, to estimate out-of-sample
+##    accuracy.
+##
+
+predictRF <- predict (model, testingSet)
+testResults <- confusionMatrix (predictRF, testingSet$classe)
+
+```
+
